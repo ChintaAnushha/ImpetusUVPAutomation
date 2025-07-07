@@ -1,0 +1,1 @@
+{"uuid":"6cd91580-9800-4ba3-acda-4460d39b5656","name":"com.impetus.tests.ra.CurrentGlobalRATest","children":["b3145852-9df1-4da1-a23b-891b8e656171"],"befores":[{"name":"setupClass","status":"passed","stage":"finished","description":"","steps":[],"attachments":[],"parameters":[],"start":1751464340627,"stop":1751464340684}],"afters":[],"start":1751464340590,"stop":1751464864062}

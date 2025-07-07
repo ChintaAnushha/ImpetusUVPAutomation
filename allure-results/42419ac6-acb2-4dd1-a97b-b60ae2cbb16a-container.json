@@ -1,0 +1,1 @@
+{"uuid":"42419ac6-acb2-4dd1-a97b-b60ae2cbb16a","name":"com.impetus.tests.RangeArchitectureTest","children":["91d8d014-34c0-4222-a7d2-a752b4165fb3"],"befores":[{"name":"setup","status":"passed","stage":"finished","description":"","steps":[],"attachments":[],"parameters":[],"start":1749559721739,"stop":1749559746375}],"afters":[],"start":1749559721709,"stop":1749559748552}

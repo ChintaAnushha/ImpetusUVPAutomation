@@ -1,0 +1,1 @@
+{"uuid":"c2e6e77d-e83d-43f1-8a75-7aa7c56f93fb","name":"Default Suite","children":["99d163bc-a998-4d7b-bdac-031922bb8ab2"],"befores":[],"afters":[{"name":"tearDownExtentReport","status":"passed","stage":"finished","description":"","steps":[],"attachments":[],"parameters":[],"start":1751862089572,"stop":1751862090070}],"start":1751862013047,"stop":1751862090070}
