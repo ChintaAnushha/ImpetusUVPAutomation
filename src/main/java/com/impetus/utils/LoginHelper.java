@@ -3,6 +3,7 @@ package com.impetus.utils;
 import com.aventstack.extentreports.ExtentTest;
 import com.aventstack.extentreports.Status;
 import com.impetus.config.ConfigurationManager;
+import com.impetus.pages.DashboardPage;
 import com.impetus.pages.LoginPage;
 import org.openqa.selenium.WebDriver;
 
@@ -47,6 +48,10 @@ public class LoginHelper {
        // CommonUtils.takeScreenshot(driver,"verify presence of Email and password");
         CommonUtils.takeScreenshot(driver, "Login completed");
         ExtentTestManager.getTest().log(Status.PASS, "Login successful");
+
+        // ← NEW: select your role here
+        DashboardPage dash = new DashboardPage(driver);
+        dash.selectAccountRole("odm-buyer");
 
         // Wait for page load after login
         CommonUtils.waitForPageLoad(driver);

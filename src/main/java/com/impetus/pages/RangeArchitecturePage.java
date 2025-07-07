@@ -2048,6 +2048,7 @@ public class RangeArchitecturePage {
 
                 // Click the label (toggles the hidden <input>)
                 label.click();
+                CommonUtils.waitForSeconds(10);
             }
 
             // 4) Verify that each underlying <input> is selected

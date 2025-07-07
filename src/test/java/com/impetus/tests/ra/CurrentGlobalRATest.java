@@ -1039,10 +1039,12 @@ public class CurrentGlobalRATest extends BasePage {
             rangeArchitecturePage.clickFilterButton();
             ExtentTestManager.getTest().log(Status.INFO,"Verifying the multi select functionalituy for filter headers");
             rangeArchitecturePage.verifyMultiSelectFunctionality("Family", Arrays.asList("Men", "Women"));
+            CommonUtils.takeScreenshot(driver,"Filter values selected");
 
 
             // Then clear all
             boolean clearAll = rangeArchitecturePage.verifyClearAllFunctionality();
+            CommonUtils.takeScreenshot(driver,"Values are cleared");
 
             Assert.assertTrue(clearAll, "Clear All should unselect all filter items");
             CommonUtils.takeScreenshot(driver, "clear_all_functionality");

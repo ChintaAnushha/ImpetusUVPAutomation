@@ -1,11 +1,16 @@
 package com.impetus.pages;
 
+import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
 import com.impetus.utils.CommonUtils;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import java.time.Duration;
 
 import javax.swing.*;
 
@@ -78,6 +83,30 @@ public class DashboardPage {
     public DashboardPage(WebDriver driver) {
         this.driver = driver;
         PageFactory.initElements(driver, this);
+    }
+
+    /**
+     * After the user lands on the “Choose an account role” screen,
+     * this method will click the role badge matching the given roleName.
+     *
+     * @param roleName the exact text of the role to pick, e.g. "vendor", "odm-buyer", "odm-cluster"
+     */
+    public void selectAccountRole(String roleName) {
+        // 1) Build an XPath that finds the <div class="nitrozen-badge-truncate"> with exactly that role text
+        String xpath = "//div[contains(@class,'nitrozen-badge-truncate') and normalize-space(text())='"
+                + roleName + "']";
+
+        // 2) Wait for it to be clickable
+        WebElement badge = new WebDriverWait(driver, Duration.ofSeconds(10))
+                .until(ExpectedConditions.elementToBeClickable(By.xpath(xpath)));
+
+        // 3) Scroll into view in case it's offscreen
+        ((JavascriptExecutor) driver).executeScript("arguments[0].scrollIntoView(true);", badge);
+
+        // 4) Click it
+        badge.click();
+
+        // Now you should land on the dashboard page
     }
 
     public boolean isDashboardDisplayed() {
