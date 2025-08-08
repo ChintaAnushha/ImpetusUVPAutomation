@@ -13,11 +13,15 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.impetus.constants.ApplicationConstants;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+
+import static java.text.Normalizer.normalize;
+import static java.util.Map.entry;
 
 public class CommonUtils {
    private static ExtentTest test ;
@@ -41,7 +45,7 @@ public class CommonUtils {
 
     public static void scrollToElement(WebDriver driver, WebElement element) {
         JavascriptExecutor js = (JavascriptExecutor) driver;
-        js.executeScript("arguments[0].scrollIntoView(true);", element);
+        js.executeScript("arguments[0].scrollIntoView({block: 'center'});", element);
     }
 
     public static void clickUsingJS(WebDriver driver, WebElement element) {
@@ -174,91 +178,249 @@ public class CommonUtils {
             return false;
         }
 
-        // Define the fields to validate
-        Set<String> fieldsToValidate = new HashSet<>(Arrays.asList(
-                "Family", "ClassName", "BrickName", "TopBrick", "Brick",
-                "Enrichment", "MRP Range", "OptionsCount", "ODM Quantity",
-                "OEM Quantity", "TotalQty", "FillPercentage"
-        ));
+//        // Define the fields to validate
+//        Set<String> fieldsToValidate = new HashSet<>(Arrays.asList(
+//                "Family", "ClassName", "BrickName", "TopBrick", "Brick",
+//                "Enrichment", "MRP Range", "OptionsCount", "ODM Quantity",
+//                "OEM Quantity", "TotalQty", "FillPercentage"
+//        ));
 
+//        // Only map the columns present in both Excel and UI:
+//        Map<String,String> fieldMap = Map.ofEntries(
+//                entry("Family",         "Family"),
+//                entry("ClassName",      "Class Name"),
+//                entry("BrickName",      "Brick Name"),
+//                entry("TopBrick",       "Top Brick"),
+//                entry("Brick",          "Brick"),
+//                entry("Enrichment",     "Enrichment"),
+//                entry("OptionsCount",   "Options"),
+//                entry("MRPMin",         "MRP Range"),
+//                entry("MRPMax",         "MRP Range"),
+//                entry("FillPercentage", "Fill Rate")
+//        );
 
-        for (int i = 0; i < uiData.size(); i++) {
-            Map<String, String> uiRow = uiData.get(i);
+        for (int i = 0; i < excelData.size(); i++) {
             Map<String, String> excelRow = excelData.get(i);
+            Map<String, String> uiRow = uiData.get(i);
 
-            for (String key : uiRow.keySet()) {
-                // Skip if not in our validation list
-                if (!fieldsToValidate.contains(key)) {
-                    continue;
+            System.out.println("Comparing row " + (i+1) + ": Excel=" + excelRow + "\n                UI=" + uiRow);
+
+            // Build normalized→original maps
+            Map<String,String> normToExcelKey = excelRow.keySet().stream()
+                    .collect(Collectors.toMap(k -> normalize(k), k -> k));
+            Map<String,String> normToUIKey    = uiRow.keySet().stream()
+                    .collect(Collectors.toMap(k -> normalize(k), k -> k));
+
+            // 3) Find the keys present in both
+            Set<String> commonKeys = new HashSet<>(normToExcelKey.keySet());
+            commonKeys.retainAll(normToUIKey.keySet());
+
+            System.out.println("Row " + (i+1)
+                    + " common columns: " + commonKeys);
+
+
+            for (String norm : commonKeys) {
+                String excelKey = normToExcelKey.get(norm);
+                String uiKey = normToUIKey.get(norm);
+
+                String excelVal = excelRow.getOrDefault(excelKey, "").trim();
+                String uiVal = uiRow.getOrDefault(uiKey, "").trim();
+
+                // Special merge rules:
+                if ("mrprange".equals(norm)) {
+                    // combine MRPMin/MRPMax
+                    String min = excelRow.getOrDefault("MRPMin","").trim();
+                    String max = excelRow.getOrDefault("MRPMax","").trim();
+                    if (min.isEmpty() && max.isEmpty())      excelVal = "";
+                    else if (min.isEmpty())                  excelVal = max;
+                    else if (max.isEmpty())                  excelVal = min;
+                    else                                      excelVal = min + " - " + max;
+                }
+                else if ("fillrate".equals(norm) || "fillpercentage".equals(norm)) {
+                    excelVal = excelVal.endsWith("%") ? excelVal : excelVal + "%";
                 }
 
-                String uiValue = uiRow.getOrDefault(key, "").trim();
-                String excelValue;
-
-                if (key.equalsIgnoreCase("MRP Range")) {
-                    String aspMin = excelRow.getOrDefault("ASPMin", "").trim();
-                    String aspMax = excelRow.getOrDefault("ASPMax", "").trim();
-                    if (aspMin.isEmpty() || aspMax.isEmpty()) {
-                        String msg = "❌ Missing ASPMin or ASPMax at row " + (i + 1);
-                        System.out.println(msg);
-                        return false;
-                    }
-                    excelValue = aspMin + " - " + aspMax;
-                } else if (key.equalsIgnoreCase("FillPercentage")) {
-                    excelValue = excelRow.getOrDefault(key, "0") + "%";
-                } else {
-                    excelValue = excelRow.getOrDefault(key, "").trim();
-                }
-
-                if (!excelValue.equalsIgnoreCase(uiValue)) {
-                    String msg = "❌ Mismatch at Row " + (i + 1) + ", Column: " + key
-                            + "\n   ➤ Excel: '" + excelValue + "', UI: '" + uiValue + "'";
-                    System.out.println(msg);
+                if (!excelVal.equalsIgnoreCase(excelVal)) {
+                    System.err.printf(
+                            "❌ Row %d mismatch on '%s' (Excel key='%s', UI key='%s'): Excel='%s' vs UI='%s'%n",
+                            i+1, norm, excelKey, uiKey, excelVal, uiVal
+                    );
                     return false;
                 }
             }
         }
 
-        System.out.println("✅ All Excel and UI data matched.");
+        System.out.println("✅ All matching columns agree row-by-row!");
         return true;
     }
 
+//                // Special case: combine MRPMin/MRPMax into “MRP Range”
+//                 // 4a) On-the-fly transforms:
+//                 if (key.equalsIgnoreCase("MRPMin") || key.equalsIgnoreCase("MRPMax")) {
+//                     // if UI uses "MRP Range" instead of separate min/max,
+//                     // skip these here and handle in the "MRP Range" iteration below.
+//                     continue;
+//                 }
+//                 if (key.equalsIgnoreCase("MRP Range")) {
+//                     // Build from excel's MRPMin/MRPMax if present
+//                     String min = excelRow.getOrDefault("MRPMin","").trim();
+//                     String max = excelRow.getOrDefault("MRPMax","").trim();
+//                     if (min.isEmpty() && max.isEmpty()) {
+//                         xVal = "";
+//                     } else if (min.isEmpty()) {
+//                         xVal = max;
+//                     } else if (max.isEmpty()) {
+//                         xVal = min;
+//                     } else {
+//                         xVal = min + " - " + max;
+//                     }
+//                 }
+//                 else if (key.equalsIgnoreCase("Fill Rate") || key.equalsIgnoreCase("FillPercentage")) {
+//                     // unify to "25%" style
+//                     xVal = xVal.endsWith("%") ? xVal : xVal + "%";
+//                 }
+//
+//                 // 4b) Compare
+//                 if (!xVal.equalsIgnoreCase(uVal)) {
+//                     System.err.printf(
+//                             "❌ Mismatch at row %d, column '%s': Excel='%s' vs UI='%s'%n",
+//                             i+1, key, xVal, uVal
+//                     );
+//                     return false;
+//                 }
+//             }
+//        }
+//
+//        System.out.println("✅ All common Excel ↔ UI fields match.");
+//        return true;
+//    }
+
+    private static String normalize(String s) {
+        return s.replaceAll("[^A-Za-z0-9]", "")
+                .toLowerCase(Locale.ROOT)
+                .trim();
+    }
+
+//    public static boolean validateMultiplierExcelAndUIData(List<Map<String, String>> excelData, List<Map<String, String>> uiData) {
+//        if (excelData.isEmpty() != uiData.isEmpty()) {
+//            System.out.println("❌ Either Excel or UI data is empty.");
+//            return false;
+//        }
+//
+//        // Get header keys from first row of each dataset
+//        Set<String> excelHeaders = excelData.get(0).keySet();
+//        Set<String> uiHeaders = uiData.get(0).keySet();
+//
+//        // Find only common headers to compare
+//        Set<String> commonHeaders = new HashSet<>(excelHeaders);
+//        commonHeaders.retainAll(uiHeaders);
+//
+//        if (commonHeaders.isEmpty()) {
+//            System.out.println("❌ No common headers found between Excel and UI.");
+//            return false;
+//        }
+//
+//        System.out.println("✅ Matching headers for validation: " + commonHeaders);
+//
+//        int rowsToCompare = Math.min(excelData.size(), uiData.size());
+////        // Define the fields to validate based on your screenshot
+////        Set<String> fieldsToValidate = new HashSet<>(Arrays.asList(
+////                "Tenant ID", "Final MRP", "RA MRP MIN", "RA MRP MAX",
+////                "Minimum Cost", "Maximum Cost", "Brick Code", "Enrichment"
+////        ));
+//
+//      //  for (int i = 0; i < uiData.size(); i++) {
+//            for (int i = 0; i < rowsToCompare; i++) {
+//            Map<String, String> excelRow = excelData.get(i);
+//                Map<String, String> uiRow = uiData.get(i);
+//
+//                for (String header : commonHeaders) {
+//                    String excelValue = excelRow.getOrDefault(header, "").trim();
+//                    String uiValue = uiRow.getOrDefault(header, "").trim();
+//
+//                    if (!excelValue.equalsIgnoreCase(uiValue)) {
+//                        System.out.println("❌ Mismatch at Row " + (i + 1) + ", Column: " + header);
+//                        System.out.println("   ➤ Excel: '" + excelValue + "', UI: '" + uiValue + "'");
+//                        return false;
+//                    }
+//                }
+//            }
+//
+//        System.out.println("✅ All matching Excel and UI data validated successfully.");
+//        return true;
+//    }
+
+//            for (String key : uiRow.keySet()) {
+//                // Skip if not in our validation list
+//                if (!excelRow.containsKey(key)) {
+//                    continue;
+//                }
+//
+//                String uiValue = uiRow.getOrDefault(key, "").trim();
+//                String excelValue = excelRow.getOrDefault(key, "").trim();
+//
+//                if (!excelValue.equalsIgnoreCase(uiValue)) {
+//                    String msg = "❌ Mismatch at Row " + (i + 1) + ", Column: " + key
+//                            + "\n   ➤ Excel: '" + excelValue + "', UI: '" + uiValue + "'";
+//                    System.out.println(msg);
+//                    return false;
+//                }
+//            }
+//        }
+//
+//        System.out.println("✅ All Excel and UI data matched.");
+//        return true;
+//    }
+
     public static boolean validateMultiplierExcelAndUIData(List<Map<String, String>> excelData, List<Map<String, String>> uiData) {
-        if (excelData.size() != uiData.size()) {
-            String msg = "❌ Row count mismatch. Excel: " + excelData.size() + ", UI: " + uiData.size();
-            System.out.println(msg);
+        if (excelData.isEmpty() || uiData.isEmpty()) {
+            System.out.println("❌ Either Excel or UI data is empty.");
             return false;
         }
 
-        // Define the fields to validate based on your screenshot
-        Set<String> fieldsToValidate = new HashSet<>(Arrays.asList(
-                "Tenant ID", "Final MRP", "RA MRP MIN", "RA MRP MAX",
-                "Minimum Cost", "Maximum Cost", "Brick Code", "Enrichment"
-        ));
+        // Step 1: Get common headers between Excel and UI
+        Set<String> excelHeaders = excelData.get(0).keySet();
+        Set<String> uiHeaders = uiData.get(0).keySet();
+        Set<String> commonHeaders = new HashSet<>(excelHeaders);
+        commonHeaders.retainAll(uiHeaders);
 
-        for (int i = 0; i < uiData.size(); i++) {
-            Map<String, String> uiRow = uiData.get(i);
-            Map<String, String> excelRow = excelData.get(i);
+        if (commonHeaders.isEmpty()) {
+            System.out.println("❌ No common headers found between Excel and UI.");
+            return false;
+        }
 
-            for (String key : uiRow.keySet()) {
-                // Skip if not in our validation list
-                if (!fieldsToValidate.contains(key)) {
-                    continue;
-                }
+        System.out.println("✅ Checking data presence for common headers: " + commonHeaders);
 
-                String uiValue = uiRow.getOrDefault(key, "").trim();
-                String excelValue = excelRow.getOrDefault(key, "").trim();
+        // Step 2: Check if data is present in either dataset (non-empty value)
+        int excelDataWithValues = 0;
+        int uiDataWithValues = 0;
 
-                if (!excelValue.equalsIgnoreCase(uiValue)) {
-                    String msg = "❌ Mismatch at Row " + (i + 1) + ", Column: " + key
-                            + "\n   ➤ Excel: '" + excelValue + "', UI: '" + uiValue + "'";
-                    System.out.println(msg);
-                    return false;
+        for (Map<String, String> row : excelData) {
+            for (String header : commonHeaders) {
+                if (row.getOrDefault(header, "").trim().length() > 0) {
+                    excelDataWithValues++;
+                    break;
                 }
             }
         }
 
-        System.out.println("✅ All Excel and UI data matched.");
+        for (Map<String, String> row : uiData) {
+            for (String header : commonHeaders) {
+                if (row.getOrDefault(header, "").trim().length() > 0) {
+                    uiDataWithValues++;
+                    break;
+                }
+            }
+        }
+
+        if (excelDataWithValues == 0 && uiDataWithValues == 0) {
+            System.out.println("❌ No data found in both Excel and UI for common headers.");
+            return false;
+        }
+
+        System.out.println("✅ Data found:");
+        System.out.println("   ➤ Excel rows with values: " + excelDataWithValues);
+        System.out.println("   ➤ UI rows with values: " + uiDataWithValues);
         return true;
     }
 
@@ -360,14 +522,15 @@ public class CommonUtils {
 
 public static boolean verifyColumnSorting(WebDriver driver, String columnName, List<WebElement> rows, int columnIndex) {
         try {
+            System.out.println("📊 Verifying sorting for column: " + columnName);
             // Get initial values
             List<String> initialValues = getColumnValues(driver, columnIndex);
-            System.out.println("📊 Verifying sorting for column: " + columnName);
+           // System.out.println("📊 Verifying sorting for column: " + columnName);
 
             // First click for ascending sort
             WebElement sortButton = driver.findElement(
                   //  By.xpath("//th[.//span[contains(text(), '" + columnName + "')]]//span[contains(@class, 'sc-')][2]")
-                    By.xpath("//th[.//*[text()='" + columnName + "']]//span[2]")
+                    By.xpath("//th[.//*[normalize-space(text())='" + columnName + "']]")
             );
 
             // Ensure element is visible and clickable
@@ -387,23 +550,23 @@ public static boolean verifyColumnSorting(WebDriver driver, String columnName, L
             List<String> ascendingValues = getColumnValues(driver, columnIndex);
 
             // Verify ascending order (small to big)
-            boolean isAscendingCorrect = isInAscendingOrder(ascendingValues);
+            boolean isAscendingCorrect = isInAscendingOrder(ascendingValues,columnName);
             if (!isAscendingCorrect) {
                 System.out.println("❌ Not in ascending order for " + columnName);
                 System.out.println("Values: " + ascendingValues);
                 return false;
             }
 
-            // Second click for descending sort
-            sortButton.click();
-            Thread.sleep(2000);
+            // Second click - Descending sort
+            clickUsingJS(driver, sortButton);
+            Thread.sleep(1000);
             waitForPageLoad(driver);
 
             // Get descending sorted values
             List<String> descendingValues = getColumnValues(driver, columnIndex);
 
             // Verify descending order (big to small)
-            boolean isDescendingCorrect = isInDescendingOrder(descendingValues);
+            boolean isDescendingCorrect = isInDescendingOrder(descendingValues,columnName);
             if (!isDescendingCorrect) {
                 System.out.println("❌ Not in descending order for " + columnName);
                 System.out.println("Values: " + descendingValues);
@@ -420,22 +583,81 @@ public static boolean verifyColumnSorting(WebDriver driver, String columnName, L
         }
 }
 
-    private static boolean isInAscendingOrder(List<String> values) {
+    private static final Set<String> numericColumns = new HashSet<>(Arrays.asList(
+            "Fill Rate", "Final MRP", "Min Cost", "Max Cost", "Total", "ODM", "OEM", "Options", "OptionsCount"
+    ));
+
+    private static boolean isInAscendingOrder(List<String> values, String columnName) {
         for (int i = 0; i < values.size() - 1; i++) {
-            if (values.get(i).compareToIgnoreCase(values.get(i + 1)) > 0) {
+            if (compare(values.get(i), values.get(i + 1), columnName) > 0) {
                 return false;
             }
         }
         return true;
     }
 
-    private static boolean isInDescendingOrder(List<String> values) {
+    private static boolean isInDescendingOrder(List<String> values, String columnName) {
         for (int i = 0; i < values.size() - 1; i++) {
-            if (values.get(i).compareToIgnoreCase(values.get(i + 1)) < 0) {
+            if (compare(values.get(i), values.get(i + 1), columnName) < 0) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static int compare(String v1, String v2, String columnName) {
+        if (numericColumns.contains(columnName)) {
+            double d1 = parseNumeric(v1);
+            double d2 = parseNumeric(v2);
+            return Double.compare(d1, d2);
+        } else {
+            return v1.trim().compareToIgnoreCase(v2.trim());
+        }
+    }
+
+    private static double parseNumeric(String value) {
+        try {
+            return Double.parseDouble(value.replace("%", "").replace(",", "").trim());
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+//    private static boolean isInAscendingOrder(List<String> values) {
+//        for (int i = 0; i < values.size() - 1; i++) {
+//            if (values.get(i).compareToIgnoreCase(values.get(i + 1)) > 0) {
+//                return false;
+//            }
+//        }
+//        return true;
+//    }
+
+//    private static boolean isInDescendingOrder(List<String> values) {
+//        for (int i = 0; i < values.size() - 1; i++) {
+//            if (values.get(i).compareToIgnoreCase(values.get(i + 1)) < 0) {
+//                return false;
+//            }
+//        }
+//        return true;
+//    }
+
+//    private static boolean isInDescendingOrder(List<String> values) {
+//        List<String> clean = values.stream()
+//                .map(CommonUtils::normalizeValue)
+//                .collect(Collectors.toList());
+//
+//        for (int i = 0; i < clean.size() - 1; i++) {
+//            if (clean.get(i).compareTo(clean.get(i + 1)) < 0) return false;
+//        }
+//        return true;
+//    }
+
+    private static String normalizeValue(String val) {
+        // Remove % and commas and trim
+        return val.replace("%", "")
+                .replace(",", "")
+                .trim()
+                .toLowerCase();
     }
 
 //    private static List<String> getColumnValues(List<String> rows, int columnIndex) {

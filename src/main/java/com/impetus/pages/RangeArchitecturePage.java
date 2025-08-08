@@ -22,12 +22,15 @@ import java.util.*;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
+
 public class RangeArchitecturePage {
     private WebDriver driver;
     private WebDriverWait wait;
     private static final String[] EXPECTED_MULTIPLIER_HEADERS = {
-            "MRP Final", "RA Min MRP", "RA Max MRP", "Minimum Cost",
-            "Maximum Cost", "Brick Code", "Enrichment"
+            "Segment","Family","ClassName","TopBrick","Brick",
+            "FinalBrick","BrickCode","BrickName", "Enrichment",
+            "FinalMRP", "MinCost", "MaxCost",
+
     };
 
     @FindBy(xpath = "//span[text()='Range Architecture']")
@@ -242,7 +245,9 @@ public class RangeArchitecturePage {
 
     // Table headers that act as filters
     //  @FindBy(xpath = "//th[contains(@class, 'filterable-header')]")
-    @FindBy(xpath = "//div[@data-testid='filter-container']")
+   // @FindBy(xpath = "//div[@data-testid='filter-container']/*")
+   // @FindBy(xpath = "//div[@data-testid='filter-container']/div[@class='sc-etVdmn crFlNs']/*")
+    @FindBy(xpath = "//div[@data-testid='filter-container']/div[@class='sc-etVdmn crFlNs']/div")
     public List<WebElement> filterableHeaders;
 
     // Sort buttons
@@ -330,20 +335,24 @@ public class RangeArchitecturePage {
     public WebElement loadingIndicator;
 
     // Modal elements
-    @FindBy(xpath = "//div[contains(@class, 'modal') or contains(@class, 'dialog')]")
+   // @FindBy(xpath = "//div[contains(@class, 'modal') or contains(@class, 'dialog')]")
+    @FindBy(xpath = "//span[text()='Upload Cluster RA']")
     public WebElement modal;
 
-    @FindBy(xpath = "//button[contains(@class, 'close') or @aria-label='Close' or text()='×']")
+
+
+   // @FindBy(xpath = "//button[contains(@class, 'close') or @aria-label='Close' or text()='×']")
+    @FindBy(xpath = "(//*[contains(@class, 'n-closebtn')])[2]")
     public WebElement closeButton;
 
     @FindBy(xpath = "//h1[text()='Upload Cluster RA'] | //h2[text()='Upload Cluster RA'] | //div[text()='Upload Cluster RA']")
     public WebElement modalTitle;
 
     // Select Cluster elements
-    @FindBy(xpath = "//label[contains(text(), 'Select Cluster')]")
+    @FindBy(xpath = "//p[contains(text(), 'Select Cluster')]")
     public WebElement selectClusterLabel;
 
-    @FindBy(xpath = "//label[contains(text(), 'Select Cluster')]//*[text()='*'] | //label[contains(text(), 'Select Cluster*')]")
+    @FindBy(xpath = "//p[contains(text(), 'Select Cluster')]//*[text()='*'] | //p[contains(text(), 'Select Cluster*')]")
     public WebElement selectClusterAsterisk;
 
     @FindBy(xpath = "//input[@placeholder='Search Clusters'] | //div[contains(@class, 'dropdown') and contains(., 'Search Clusters')]")
@@ -712,6 +721,23 @@ public class RangeArchitecturePage {
     public boolean isFilterButtonDisplayed() {
         CommonUtils.waitForVisibility(driver, filterButton, 5);
         return filterButton.isDisplayed();
+    }
+
+    public boolean isDefaultCityAhmedabad(WebDriver driver) {
+        try {
+            WebElement dropdownInput = driver.findElement(By.xpath("//input[@class='n-dropdown-search dropdown-selectedtext']"));
+            String selectedValue = dropdownInput.getAttribute("value");
+
+            if ("Ahmedabad".equalsIgnoreCase(selectedValue)) {
+                System.out.println("✅ 'Ahmedabad' is selected by default.");
+                return true;
+            } else {
+                System.out.println("❌ Expected 'Ahmedabad' but found: " + selectedValue);
+            }
+        } catch (NoSuchElementException e) {
+            System.out.println("❌ Dropdown input not found.");
+        }
+        return false;
     }
 
     public boolean isDownloadButtonDisplayed() {
@@ -1489,7 +1515,7 @@ public class RangeArchitecturePage {
 
     public boolean isUploadSuccessfullMessageDisplayed() {
         //  CommonUtils.waitForPageLoad(driver);
-        CommonUtils.waitForVisibility(driver, uploadSuccessfullMessage, 10);
+        CommonUtils.waitForVisibility(driver, uploadSuccessfullMessage, 50);
         return uploadSuccessfullMessage.isDisplayed();
     }
 
@@ -2255,16 +2281,22 @@ public class RangeArchitecturePage {
 
     // Get all available filter headers
     public List<String> getAllFilterHeaders() {
-        List<String> headers = new ArrayList<>();
-        for (WebElement header : filterableHeaders) {
-            headers.add(header.getText());
-        }
-        return headers;
+        return filterableHeaders.stream()
+                .map(h -> h.getText().trim().replaceAll("\\s+", " "))
+                .collect(Collectors.toList());
+
+//        List<String> headers = new ArrayList<>();
+//        for (WebElement header : filterableHeaders) {
+//            headers.add(header.getText());
+//        }
+//        return headers;
     }
 
     // Verify filter dropdown order
     public boolean verifyFilterHeaderOrder(List<String> expectedOrder) {
         List<String> actualOrder = getAllFilterHeaders();
+        System.out.println("Expected: " + expectedOrder);
+        System.out.println("Actual  : " + actualOrder);
         return actualOrder.equals(expectedOrder);
     }
 

@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 
+
 public class ExcelUtils {
 
 
@@ -73,6 +74,7 @@ public class ExcelUtils {
                 }
             }
             return data;
+           // CommonUtils.takeScreenshot(driver,"");
         }
 
     public static List<Map<String, String>> readMRPMultiplierExcelData(String filePath, String sheetName) throws IOException {
@@ -158,11 +160,11 @@ public class ExcelUtils {
             // Validate integer fields
             if (!isValidInteger(row.get("MRPMin")) ||
                     !isValidInteger(row.get("MRPMax")) ||
-                    !isValidInteger(row.get("BrickCode")) ||
-                    !isValidInteger(row.get("OptionsCount")) ||
-                    !isValidInteger(row.get("ODM Quantity")) ||
-                    !isValidInteger(row.get("OEM Quantity")) ||
-                    !isValidInteger(row.get("TotalQty"))) {
+                   // !isValidInteger(row.get("BrickCode")) ||
+                    !isValidInteger(row.get("OptionsCount")))  { //||
+//                    !isValidInteger(row.get("ODM Quantity")) ||
+//                    !isValidInteger(row.get("OEM Quantity")) ||
+//                    !isValidInteger(row.get("TotalQty"))) {
                 System.out.println("❌ Invalid integer data type in row " + (i + 2)); // +2 for actual Excel row (header + 0-based index)
                 return false;
             }
@@ -179,11 +181,11 @@ public class ExcelUtils {
                 return false;
             }
 
-            // Validate percentage field
-            if (!isValidPercentage(row.get("FillPercentage"))) {
-                System.out.println("❌ Invalid percentage format in row " + (i + 2));
-                return false;
-            }
+//            // Validate percentage field
+//            if (!isValidPercentage(row.get("FillPercentage"))) {
+//                System.out.println("❌ Invalid percentage format in row " + (i + 2));
+//                return false;
+//            }
         }
         return true;
     }

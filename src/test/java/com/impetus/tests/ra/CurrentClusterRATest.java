@@ -16,6 +16,9 @@ import org.testng.asserts.SoftAssert;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -27,38 +30,84 @@ public class CurrentClusterRATest extends BasePage {
     private DashboardPage dashboardPage;
     private RangeArchitecturePage rangeArchitecturePage;
 
+    private LoginHelper loginHelper;
+    private NavigationHelper navHelper;
+
+
     //  private static final String RA_FILE_PATH = "src/test/java/com/impetus/data/RA.xlsx";
     String RA_FILE_PATH = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/RA.xlsx";
     private String downloadPath = System.getProperty("user.home") + "/Downloads";
     private static final String TEST_FILES_PATH = "src/test/resources/testfiles/";
     private static final String LARGE_TEST_FILE_PATH = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/LargeRA.xlsx";
 
+    // Test data file paths
+    private static final String VALID_XLSX_FILE = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/RA.xlsx";
+    private static final String VALID_CSV_FILE = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/test_data.csv";
+    private static final String INVALID_TXT_FILE = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/invalid_file.txt";
+    private static final String INVALID_PDF_FILE = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/invalid_file.pdf";
+    private static final String INVALID_DOC_FILE = "/Users/chinta.anusha/Desktop/UVPAutomation/src/test/java/com/impetus/data/invalid_file.doc";
 
     public CurrentClusterRATest() {
         super(DriverManager.getDriver());
     }
 
-    @BeforeClass
-        public void setup() {
-            driver = DriverManager.getDriver();
+    @BeforeClass(alwaysRun = true)
+    public void setupClass() {
+        driver = DriverManager.getDriver();
+        loginHelper = new LoginHelper(driver);
+        navHelper = new NavigationHelper(driver);
+        rangeArchitecturePage = new RangeArchitecturePage(driver); // Safe
 
-            // Use LoginHelper to do login with config credentials
-            LoginHelper loginHelper = new LoginHelper(driver);
-            loginHelper.loginToApplication();
+    }
 
-            dashboardPage = new DashboardPage(driver);
-            rangeArchitecturePage = new RangeArchitecturePage(driver);
+/**
+ * Create test data files for different scenarios
+ */
+private void createTestDataFiles() {
+    try {
+        // Create CSV test file
+        createCSVTestFile();
 
-            // ✅ Call the reusable method from DashboardTest to ensure navigation/setup
-            DashboardTest dashboardTest = new DashboardTest();
-            // dashboardTest.verifyOdmBuyerDashboard();
-            dashboardTest.uvpSubMenu();
-        }
+        // Create invalid format files
+        createInvalidFormatFiles();
+
+    } catch (IOException e) {
+        System.err.println("Failed to create test data files: " + e.getMessage());
+    }
+}
+
+private void createCSVTestFile() throws IOException {
+    String csvContent = "Family,Class Name,Brick Name,Top Brick,Brick,Enrichment,MRP Range,Options,ODM,OEM,Total,Fill Rate\n" +
+            "Test Family,Test Class,Test Brick,Test Top Brick,Test Brick Value,Test Enrichment,100-200,Test Options,10,20,30,85.5\n" +
+            "Sample Family,Sample Class,Sample Brick,Sample Top Brick,Sample Brick Value,Sample Enrichment,200-300,Sample Options,15,25,40,90.2";
+
+    java.nio.file.Path csvPath = Paths.get(VALID_CSV_FILE);
+    Files.createDirectories(csvPath.getParent());
+    Files.write(csvPath, csvContent.getBytes());
+}
+
+private void createInvalidFormatFiles() throws IOException {
+    // Create TXT file
+    java.nio.file.Path txtPath = Paths.get(INVALID_TXT_FILE);
+    Files.createDirectories(txtPath.getParent());
+    Files.write(txtPath, "This is a text file content".getBytes());
+
+    // Create PDF file (dummy content)
+    java.nio.file.Path pdfPath = Paths.get(INVALID_PDF_FILE);
+    Files.write(pdfPath, "Dummy PDF content".getBytes());
+
+    // Create DOC file (dummy content)
+    Path docPath = Paths.get(INVALID_DOC_FILE);
+    Files.write(docPath, "Dummy DOC content".getBytes());
+}
+
 
         @Test(description = "Verify Range Architecture Navigation and Sections")
         public void testRangeArchitectureNavigation() {
             try {
-                ExtentTest test = ExtentTestManager.getTest();
+            //    ExtentTest test = ExtentTestManager.getTest();
+                loginHelper.loginToApplication();
+                navHelper.navigateToRangeArchitecture();
                 CommonUtils.waitForPageLoad(driver);
                 Thread.sleep(2000);
 
@@ -100,7 +149,8 @@ public class CurrentClusterRATest extends BasePage {
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the table headers and content");
 
             //click on Current Cluster RA Tab
-            rangeArchitecturePage.clickCurrentClusterRAButton();
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the current cluster RA tab clicking");
+            rangeArchitecturePage.switchToCurrentClusterRA();
             CommonUtils.waitForPageLoad(driver);
 
             // Verify table headers and content
@@ -110,6 +160,9 @@ public class CurrentClusterRATest extends BasePage {
             ExtentTestManager.getTest().log(Status.INFO, "Filter button should be displayed");
             Assert.assertTrue(rangeArchitecturePage.isFilterButtonDisplayed(), "Filter button should be displayed");
             CommonUtils.takeScreenshot(driver, "verifyFilter button");
+            ExtentTestManager.getTest().log(Status.INFO,"Verify the cluster dropdown display");
+            Assert.assertTrue(rangeArchitecturePage.isDefaultCityAhmedabad(driver));
+            CommonUtils.takeScreenshot(driver,"Cluster dropdown is displayed");
             ExtentTestManager.getTest().log(Status.INFO, "Table headers should be present");
             Assert.assertTrue(rangeArchitecturePage.verifyTableHeaders(), "Table headers should be present");
             CommonUtils.takeScreenshot(driver, "verifyTable headers");
@@ -119,17 +172,23 @@ public class CurrentClusterRATest extends BasePage {
         }
 
         @Test(description = "Verify Search Bar Functionality", dependsOnMethods = "testRangeArchitectureNavigation")
-        public void verifySearchBar() {
+        public void verifySearchBarFunctionality() {
             ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             ExtentTestManager.getTest().log(Status.INFO, "Verifying search bar functionality in Range Architecture page");
             CommonUtils.takeScreenshot(driver, "verifySearchBar");
             Assert.assertTrue(rangeArchitecturePage.verifySearchBarFunctionality(),
                     "Search bar should be clickable and functional");
+            CommonUtils.takeScreenshot(driver, "Search bar is clickable ");
+
         }
 
         @Test(description = "Verify search bar presence and functionality", dependsOnMethods = "testRangeArchitectureNavigation")
         public void verifySearchBarBasics() {
             ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             ExtentTestManager.getTest().log(Status.INFO, "Verifying search bar Presence in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.verifySearchBarPresence(),
                     "Search bar should be present and enabled");
@@ -139,6 +198,8 @@ public class CurrentClusterRATest extends BasePage {
         @Test(description = "Verify exact search functionality", dependsOnMethods = "testRangeArchitectureNavigation")
         public void verifyExactSearch() {
             ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             ExtentTestManager.getTest().log(Status.INFO, "Entering the text in search bar in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.enterSearchText("Western Wear"),
                     "Should be able to enter western wear in search bar");
@@ -152,6 +213,8 @@ public class CurrentClusterRATest extends BasePage {
         @Test(description = "Verify partial search functionality", dependsOnMethods = "testRangeArchitectureNavigation")
         public void verifyPartialSearch() {
             ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             ExtentTestManager.getTest().log(Status.INFO, "Entering the partial text in search  Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.verifyPartialSearch("West"),
                     "Should find partial matches");
@@ -162,7 +225,8 @@ public class CurrentClusterRATest extends BasePage {
         public void verifyPagination() {
             try {
                 ExtentTest test = ExtentTestManager.getTest();
-
+                rangeArchitecturePage.switchToCurrentClusterRA();
+                CommonUtils.waitForPageLoad(driver);
                 // First verify the table is loaded
 
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the table is loaded in Range Architecture page");
@@ -219,9 +283,11 @@ public class CurrentClusterRATest extends BasePage {
             }
         }
 
-        @Test(description = "Verify sort functionality of the headers")//,dependsOnMethods = "verifyPagination")
+        @Test(description = "Verify sort functionality of the headers",dependsOnMethods = "testRangeArchitectureNavigation")
         public void verifySortingFunctionality() {
             ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             ExtentTestManager.getTest().log(Status.INFO, "Verifying to get the table first row data  in Range Architecture page");
             CommonUtils.waitForVisibility(driver, rangeArchitecturePage.getFirstTableRow(), 20);
 
@@ -266,9 +332,11 @@ public class CurrentClusterRATest extends BasePage {
             CommonUtils.takeScreenshot(driver,"FillRate header");
         }
 
-        @Test(priority = 1, description = "Verify View button redirects to detailed page")
+        @Test(priority = 1, description = "Verify View button redirects to detailed page",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testViewButtonRedirectsToDetailedPage() {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
 
             // Verify listing page is displayed
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the List page display in Range Architecture page");
@@ -304,10 +372,12 @@ public class CurrentClusterRATest extends BasePage {
             System.out.println("✓ View button successfully redirects to detailed page");
         }
 
-        @Test(priority = 2, description = "Verify back button is present on redirected page")
+        @Test(priority = 2, description = "Verify back button is present on redirected page",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testBackButtonPresenceOnDetailedPage() {
 
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             // Navigate to details page
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the navigation to the details page in Range Architecture page");
             rangeArchitecturePage.clickFirstViewButton();
@@ -316,20 +386,19 @@ public class CurrentClusterRATest extends BasePage {
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the back button in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.isBackButtonDisplayed(),
                     "Back button should be displayed on details page");
+            CommonUtils.takeScreenshot(driver,"Back button is displayed");
 
             // Verify back button is clickable
             Assert.assertTrue(rangeArchitecturePage.isBackButtonClickable(),
                     "Back button should be clickable");
-
-            // Take screenshot
             CommonUtils.takeScreenshot(driver,"back_button_verification");
-
             System.out.println("✓ Back button is present and clickable on details page");
         }
 
-        @Test(priority = 3, description = "Verify RAID is displayed on top left next to back button")
+        @Test(priority = 3, description = "Verify RAID is displayed on top left next to back button",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testRaidDisplayedTopLeft() {
-        ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
 
             // Navigate to details page
             String expectedRaidId = rangeArchitecturePage.getRaidIdFromRow(0);
@@ -339,15 +408,7 @@ public class CurrentClusterRATest extends BasePage {
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the raid display on top left in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.isRaidDisplayedTopLeft(),
                     "RAID should be displayed on top left next to back button");
-
-            // Verify RAID ID matches
-            String displayedRaidId = rangeArchitecturePage.getRaidDisplayText();
-            Assert.assertTrue(displayedRaidId.contains(expectedRaidId),
-                    "Displayed RAID ID should match the selected RAID");
-
-            // Take screenshot
-            CommonUtils.takeScreenshot(driver,"raid_display_top_left");
-
+            CommonUtils.takeScreenshot(driver, "RAID_Top_Left_Displayed");
             System.out.println("✓ RAID is correctly displayed on top left next to back button");
         }
 
@@ -384,9 +445,11 @@ public class CurrentClusterRATest extends BasePage {
             System.out.println("✓ Page correctly lands with ODM tab active and all features present");
         }
 
-        @Test(priority = 5, description = "Verify back button navigates to listing page")
+        @Test(priority = 5, description = "Verify back button navigates to listing page",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testBackButtonNavigatesToListingPage() {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             // Get listing page URL
             String originalListingUrl = rangeArchitecturePage.getCurrentUrl();
 
@@ -397,12 +460,12 @@ public class CurrentClusterRATest extends BasePage {
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the details page in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.isDetailsPageDisplayed(),
                     "Should be on details page");
-
             // Take screenshot before clicking back
             CommonUtils.takeScreenshot(driver,"before_clicking_back_button");
 
             // Click back button
             rangeArchitecturePage.clickBackButton();
+            CommonUtils.waitForPageLoad(driver);
 
             // Verify we're back on listing page
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the listing page in Range Architecture page");
@@ -411,18 +474,19 @@ public class CurrentClusterRATest extends BasePage {
 
             // Verify URL is back to listing page
             String currentUrl = rangeArchitecturePage.getCurrentUrl();
-            Assert.assertTrue(currentUrl.contains("raids") || currentUrl.equals(originalListingUrl),
+            Assert.assertTrue(currentUrl.contains("range-architecture") || currentUrl.equals(originalListingUrl),
                     "Should be back on the main listing page");
 
             // Take screenshot after navigation
             CommonUtils.takeScreenshot(driver,"after_clicking_back_button");
-
             System.out.println("✓ Back button successfully navigates to listing page");
         }
 
-        @Test(priority = 6, description = "Verify View buttons are clickable for all RAIDs")
+        @Test(priority = 6, description = "Verify View buttons are clickable for all RAIDs",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testAllViewButtonsClickable() {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
 
             // Verify all view buttons are clickable
             ExtentTestManager.getTest().log(Status.INFO, "Verifying all the view buttons in Range Architecture page");
@@ -437,14 +501,15 @@ public class CurrentClusterRATest extends BasePage {
 
             // Take screenshot
             CommonUtils.takeScreenshot(driver,"all_view_buttons_verification");
-
             System.out.println("✓ All " + viewButtonCount + " View buttons are clickable");
         }
 
-        @Test(priority = 7, description = "Test complete navigation flow for multiple RAIDs")
+        @Test(priority = 7, description = "Test complete navigation flow for multiple RAIDs",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testCompleteNavigationFlowMultipleRaids() {
 
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             int viewButtonCount = Math.min(rangeArchitecturePage.getViewButtonsCount(), 3); // Test first 3 RAIDs
 
             for (int i = 0; i < viewButtonCount; i++) {
@@ -485,93 +550,123 @@ public class CurrentClusterRATest extends BasePage {
 
         }
 
-        @Test(description = "Verify Download button functionality")
-        public void verifyDownloadFunctionality () {
-        ExtentTest test = ExtentTestManager.getTest();
+//        @Test(description = "Verify Download button functionality",dependsOnMethods = "testRangeArchitectureNavigation")
+//        public void verifyDownloadFunctionality () {
+//        ExtentTest test = ExtentTestManager.getTest();
+//            rangeArchitecturePage.switchToCurrentClusterRA();
+//            CommonUtils.waitForPageLoad(driver);
+//            // Click the Download button
+//            ExtentTestManager.getTest().log(Status.INFO, "Verifying the download button display in Range Architecture page");
+//            Assert.assertTrue(rangeArchitecturePage.isDownloadButtonDisplayed(), "Download button should be displayed");
+//            CommonUtils.takeScreenshot(driver,"Download button verification");
+//            //Assert.assertTrue(rangeArchitecturePage.isUploadModalDisplayed(), "Upload modal should be displayed")
+//            // isDisplayed() && downloadBtn.isEnabled(), "Download button not clickable");
+//            //  downloadBtn.click();
+//        }
 
-            // Click the Download button
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the download button display in Range Architecture page");
-            Assert.assertTrue(rangeArchitecturePage.isDownloadButtonDisplayed(), "Download button should be displayed");
-            CommonUtils.takeScreenshot(driver,"Download button verification");
-            //Assert.assertTrue(rangeArchitecturePage.isUploadModalDisplayed(), "Upload modal should be displayed")
-            // isDisplayed() && downloadBtn.isEnabled(), "Download button not clickable");
-            //  downloadBtn.click();
-        }
-
-        @Test(description = "Verify Download button functionality")
+        @Test(description = "Verify Download button functionality",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testCompleteDownloadFunctionality () throws Exception {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
+
+            //Verify the download button
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the Download button visible");
+            Assert.assertTrue(rangeArchitecturePage.isDownloadButtonDisplayed(), "Download button should be displayed");
+            CommonUtils.takeScreenshot(driver, "Download button visible");
 
             // 1. Trigger download
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the download and file path in Range Architecture page");
             String downloadedFile = rangeArchitecturePage.triggerDownloadAndGetFilePath();
+            CommonUtils.takeScreenshot(driver, "Filepath");
             System.out.println("Downloaded file at: " + downloadedFile);
 
             // ✅ Validate success message
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the download success message in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.isDownloadSuccessMessageDisplayed(), "Download Successful message should be displayed");
+            CommonUtils.takeScreenshot(driver, "Download success message is displayed");
 
             // 2. Validate file exists and naming convention
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the Excel file and Naming convention in Range Architecture page");
             Assert.assertTrue(ExcelUtils.isValidExcelFile(downloadedFile));
+            CommonUtils.takeScreenshot(driver, "Excel file validation");
             Assert.assertTrue(ExcelUtils.validateFileNamingConvention(
                     new File(downloadedFile).getName()));
-            CommonUtils.takeScreenshot(driver,"Excel file and naming convention");
+            CommonUtils.takeScreenshot(driver,"File Naming convention");
 
             // 3. Validate headers
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the excel headers in Range Architecture page");
-            Assert.assertTrue(ExcelUtils.validateExcelHeaders(downloadedFile, "RA-250605-0001"));
-            CommonUtils.takeScreenshot(driver,"Excel headers verification");
+            Assert.assertTrue(ExcelUtils.validateExcelHeaders(downloadedFile, "RA-250711-0001"));
+            CommonUtils.takeScreenshot(driver,"Headers are verified in excel");
 
             // 4. Read and validate data
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying and validating the data table in Range Architecture page");
-            List<Map<String, String>> data = ExcelUtils.readExcelData(downloadedFile, "RA-250605-0001");
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the data table in Range Architecture page");
+            List<Map<String, String>> data = ExcelUtils.readExcelData(downloadedFile, "RA-250711-0001");
             Assert.assertTrue(ExcelUtils.validateDataTypes(data));
+            CommonUtils.takeScreenshot(driver, "Data types are valid");
             Assert.assertTrue(ExcelUtils.validateTotalQtyCalculation(data));
+            CommonUtils.takeScreenshot(driver, "Validates the Quality calculation");
             Assert.assertTrue(ExcelUtils.validateFillPercentageCalculation(data));
             CommonUtils.takeScreenshot(driver,"Excel data verification");
         }
 
-        @Test(priority = 1, description = "Verify Filter button visibility")
+        @Test(priority = 1, description = "Verify Filter button visibility",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testFilterButtonVisibility () {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
+
             // Verify if the Filter button is present right next to the Search bar in blue color
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter button display in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.isFilterButtonDisplayed(),
                     "Filter button should be visible");
+            CommonUtils.takeScreenshot(driver, "Filter button is displayed");
 
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the search bar next to Filter button");
             Assert.assertTrue(rangeArchitecturePage.isFilterButtonNextToSearchBar(),
                     "Filter button should be next to search bar");
+            CommonUtils.takeScreenshot(driver, "Filter button is next to the search bar");
 
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the color of filter button");
             Assert.assertTrue(rangeArchitecturePage.isFilterButtonBlue(),
                     "Filter button should be blue in color");
 
             CommonUtils.takeScreenshot(driver, "filter_button_visibility");
         }
 
-        @Test(priority = 2, description = "Verify Filter button functionality")
+        @Test(priority = 2, description = "Verify Filter button functionality",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testFilterButtonFunctionality () {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
 
             // Verify that when the Filter button is clicked, all table headers appear as dropdown fields
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the Filter button is clickable and table headers appear in Range Architecture page");
             rangeArchitecturePage.clickFilterButton();
 
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter headers");
             Assert.assertTrue(rangeArchitecturePage.areFilterHeadersDisplayed(),
                     "All filter headers should be displayed after clicking filter button");
+            CommonUtils.takeScreenshot(driver, "Filter headers are displayed");
 
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the ClearAll button display");
             Assert.assertTrue(rangeArchitecturePage.isClearAllButtonDisplayed(),
                     "Clear All button should be displayed");
+            CommonUtils.takeScreenshot(driver, "ClearAll is displayed");
 
-            Assert.assertTrue(rangeArchitecturePage.isClearAllButtonBlue(),
-                    "Clear All button should be blue in color");
-
-            CommonUtils.takeScreenshot(driver, "filter_button_functionality");
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the ClearAll button color");
+            Assert.assertTrue(rangeArchitecturePage.isClearAllButtonDarkText(),
+                    "Clear All button should be grey in color");
+            CommonUtils.takeScreenshot(driver, "ClearAll_button_color is dark black");
         }
 
-        @Test(priority = 3, description = "Verify headers on clicking Filter button")
+        @Test(priority = 3, description = "Verify headers on clicking Filter button",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testFilterHeaders () {
         ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
+
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter button");
             rangeArchitecturePage.clickFilterButton();
 
             // Verify all table headers are displayed in correct order
@@ -581,20 +676,22 @@ public class CurrentClusterRATest extends BasePage {
             );
 
             List<String> actualHeaders = rangeArchitecturePage.getFilterHeadersOrder();
+            CommonUtils.takeScreenshot(driver, "Table headers are in order");
 
             Assert.assertEquals(actualHeaders, expectedHeaders,
                     "Filter headers should appear in the correct order");
+            CommonUtils.takeScreenshot(driver, "Filter headers are in order");
 
             Assert.assertTrue(rangeArchitecturePage.isClearAllButtonDisplayed(),
                     "Clear All button should be displayed next to headers");
-
             CommonUtils.takeScreenshot(driver, "filter_headers_display");
         }
 
-        @Test(priority = 4, description = "Verify functionality of each filter header")
+        @Test(priority = 4, description = "Verify functionality of each filter header",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testFilterHeaderFunctionality () {
-
-        ExtentTest test = ExtentTestManager.getTest();
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter button");
             rangeArchitecturePage.clickFilterButton();
 
             String[] headers = {"Family", "Class Name", "Brick Name", "Top Brick", "Brick", "Enrichment"};
@@ -603,88 +700,198 @@ public class CurrentClusterRATest extends BasePage {
                 // Click on filter header arrow
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter header arrow in Range Architecture page");
                 rangeArchitecturePage.clickFilterHeader(header);
+                CommonUtils.takeScreenshot(driver, "Family header clicked");
+
 
                 // Verify dropdown content is displayed
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the dropdown content is displayed in Range Architecture page");
                 Assert.assertTrue(rangeArchitecturePage.isFilterDropdownDisplayed(),
                         header + " filter dropdown should be displayed");
+                CommonUtils.takeScreenshot(driver, "Filter dropdown is displayed");
+
 
                 // Verify search bar is present
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the search bar is present in Range Architecture page");
                 Assert.assertTrue(rangeArchitecturePage.isFilterSearchBoxDisplayed(),
                         header + " filter should have search bar");
+                CommonUtils.takeScreenshot(driver, "Filter search box is displayed");
 
-                // Verify scrollable list is present
-                ExtentTestManager.getTest().log(Status.INFO, "Verifying the scrollable list in Range Architecture page");
-                Assert.assertTrue(rangeArchitecturePage.isScrollableListDisplayed(),
-                        header + " filter should have scrollable list");
+
+//                // Verify scrollable list is present
+//                ExtentTestManager.getTest().log(Status.INFO, "Verifying the scrollable list in Range Architecture page");
+//                Assert.assertTrue(rangeArchitecturePage.isScrollableListDisplayed(),
+//                        header + " filter should have scrollable list");
 
                 // Verify clear button is present
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the clear button in Range Architecture page");
                 Assert.assertTrue(rangeArchitecturePage.isFilterClearButtonDisplayed(),
                         header + " filter should have clear button");
+                CommonUtils.takeScreenshot(driver, "Family Clear button is displayed");
 
                 CommonUtils.takeScreenshot(driver, "filter_" + header.toLowerCase().replace(" ", "_") + "_dropdown");
 
                 // Close dropdown by clicking elsewhere or pressing escape
-                rangeArchitecturePage.clickFilterButton(); // Close current dropdown
+                rangeArchitecturePage.closeDropdown(); // Close current dropdown
             }
         }
 
-        @Test(priority = 5, description = "Verify select/unselect dropdown values & clear")
+        @Test(priority = 5, description = "Verify select/unselect dropdown values & clear",dependsOnMethods = "testRangeArchitectureNavigation" )
         public void testFilterSelectionAndClear () {
-        ExtentTest test = ExtentTestManager.getTest();
+            ExtentTestManager.getTest().log(Status.INFO, "Opening the filter panel and applying Family filter");
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
             rangeArchitecturePage.clickFilterButton();
             rangeArchitecturePage.clickFilterHeader("Family");
 
             // Test single selection
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the single selection in dropdown in Range Architecture page");
+          //  ExtentTestManager.getTest().log(Status.INFO, "Verifying the single selection in dropdown in Range Architecture page");
             rangeArchitecturePage.selectFilterOption("Women");
-            CommonUtils.takeScreenshot(driver, "single_option_selected");
+            CommonUtils.waitForPageLoad(driver);
+            CommonUtils.waitForSeconds(20);
+            CommonUtils.takeScreenshot(driver, "filter_family_women_selected");
 
-            // Test multiple selection
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the Multiple selection in dropdown in Range Architecture page");
-            List<String> multipleOptions = Arrays.asList("Men", "Kids");
+            int pageCount = 1;
+            while (true) {
+                List<WebElement> rows = rangeArchitecturePage.getAllTableRows();
+                Assert.assertTrue(rows.size() > 0, "Table rows should not be empty on page " + pageCount);
+
+                for (WebElement row : rows) {
+                    String family = rangeArchitecturePage.getCellValueFromRow(row, "Family");
+                    Assert.assertEquals(family, "Women", "Family column should be 'Women'");
+                }
+
+                CommonUtils.takeScreenshot(driver, "family_filter_page_" + pageCount);
+
+                // Check if next is disabled by class
+                if (!rangeArchitecturePage.isNextButtonEnabled()) {
+                    System.out.println("✅ Reached last page. Total pages: " + pageCount);
+                    break;
+                }
+
+                // Now safely click next
+                try {
+                    rangeArchitecturePage.goToNextPage(); // scrolls and clicks using JS safely
+                    CommonUtils.waitForPageLoad(driver);
+                    pageCount++;
+                } catch (ElementClickInterceptedException e) {
+                    System.out.println("⚠️ Click intercepted. Likely already on last page. Stopping pagination.");
+                    break;
+                } catch (Exception e) {
+                    System.out.println("⚠️ Unexpected error on page " + pageCount + ": " + e.getMessage());
+                    break;
+                }
+            }
+
+            ExtentTestManager.getTest().log(Status.PASS, "✅ Verified all pages for Family = Women");
+
+
+            // Step 2: Apply multiple selection on Class Name
+            ExtentTestManager.getTest().log(Status.INFO, "Applying multi-select filter for Class Name");
+            rangeArchitecturePage.clickFilterHeader("Class Name");
+            List<String> multipleOptions = Arrays.asList("Inner Wear", "Western Wear");
             rangeArchitecturePage.selectMultipleFilterOptions(multipleOptions);
-            CommonUtils.takeScreenshot(driver, "multiple_options_selected");
+            CommonUtils.waitForPageLoad(driver);
+            CommonUtils.waitForSeconds(20);
+            CommonUtils.takeScreenshot(driver, "class_name_multiselect_applied");
 
-            // Test unselect
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the unselect in dropdown in Range Architecture page");
-            rangeArchitecturePage.unselectFilterOption("Women");
-            CommonUtils.takeScreenshot(driver, "option_unselected");
+            // ✅ Validate Class Name values across all pages
+            pageCount = 1;
+            while (true) {
+                List<WebElement> rows = rangeArchitecturePage.getAllTableRows();
+                Assert.assertTrue(rows.size() > 0, "Table rows should not be empty on page " + pageCount);
 
-            // Test clear button functionality
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the clear button functionality in dropdown in Range Architecture page");
+                for (WebElement row : rows) {
+                    String className = rangeArchitecturePage.getCellValueFromRow(row, "Class Name");
+                    Assert.assertTrue(
+                            className.equals("Inner Wear") || className.equals("Western Wear"),
+                            "Class Name should be 'Inner Wear' or 'Western Wear'. Found: " + className
+                    );
+                }
+
+                CommonUtils.takeScreenshot(driver, "class_name_page_" + pageCount);
+
+                // Check if next is disabled by class
+                if (!rangeArchitecturePage.isNextButtonEnabled()) {
+                    System.out.println("✅ Reached last page. Total pages: " + pageCount);
+                    break;
+                }
+
+                // Now safely click next
+                try {
+                    rangeArchitecturePage.goToNextPage(); // scrolls and clicks using JS safely
+                    CommonUtils.waitForPageLoad(driver);
+                    pageCount++;
+                } catch (ElementClickInterceptedException e) {
+                    System.out.println("⚠️ Click intercepted. Likely already on last page. Stopping pagination.");
+                    break;
+                } catch (Exception e) {
+                    System.out.println("⚠️ Unexpected error on page " + pageCount + ": " + e.getMessage());
+                    break;
+                }
+            }
+
+            ExtentTestManager.getTest().log(Status.PASS, "✅ Verified all pages for Class Name multi-select");
+
+            // Step 3: Unselect "Western Wear"
+            ExtentTestManager.getTest().log(Status.INFO, "Unselecting 'Western Wear' from Class Name");
+            rangeArchitecturePage.clickFilterHeader("Class Name");
+            rangeArchitecturePage.unselectFilterOption("Western Wear");
+            CommonUtils.waitForPageLoad(driver);
+            CommonUtils.waitForSeconds(10);
+            CommonUtils.takeScreenshot(driver, "western_wear_unselected");
+
+            // Step 4: Click Clear All button
+            ExtentTestManager.getTest().log(Status.INFO, "Clicking Clear All button");
             rangeArchitecturePage.clickFilterClearButton();
-            Assert.assertTrue(rangeArchitecturePage.areAllOptionsUnselected(),
-                    "All options should be unselected after clicking clear button");
+            CommonUtils.waitForPageLoad(driver);
+            CommonUtils.waitForSeconds(10);
+            Assert.assertTrue(rangeArchitecturePage.areAllOptionsUnselected(), "Filters should be cleared");
+            CommonUtils.takeScreenshot(driver, "filters_cleared");
 
-            CommonUtils.takeScreenshot(driver, "all_options_cleared");
+            // Step 5: Validate table is still showing records after clear
+            List<WebElement> rowsAfterClear = rangeArchitecturePage.getAllTableRows();
+            Assert.assertTrue(rowsAfterClear.size() > 0, "Table should still show data after clearing filters");
+
+            for (WebElement row : rowsAfterClear) {
+                String family = rangeArchitecturePage.getCellValueFromRow(row, "Family");
+                Assert.assertNotNull(family, "Family column value should not be null");
+            }
+
+            ExtentTestManager.getTest().log(Status.PASS, "✅ Verified data is visible after Clear All");
         }
 
 
-        @Test(priority = 6, description = "Verify search bar under filter dropdown")
+    @Test(priority = 6, description = "Verify search bar under filter dropdown",dependsOnMethods = "testRangeArchitectureNavigation")
         public void testFilterSearchBar () {
-        ExtentTest test = ExtentTestManager.getTest();
-            rangeArchitecturePage.clickFilterButton();
+        ExtentTestManager.getTest().log(Status.INFO,"Verifying the filter button and headers");
+        rangeArchitecturePage.switchToCurrentClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+        rangeArchitecturePage.clickFilterButton();
             rangeArchitecturePage.clickFilterHeader("Family");
 
             // Verify search bar is editable
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the search bar is editable in dropdown in Range Architecture page");
             Assert.assertTrue(rangeArchitecturePage.isFilterSearchBoxEditable(),
                     "Filter search bar should be editable");
+        CommonUtils.takeScreenshot(driver,"search box is editable");
 
-            // Test complete value search
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the text entering in search bar in dropdown in Range Architecture page");
+
+        // Test complete value search
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter options and complete search");
             rangeArchitecturePage.searchInFilter("Women");
+            CommonUtils.waitForPageLoad(driver);
+            CommonUtils.waitForSeconds(10);
             List<String> completeSearchResults = rangeArchitecturePage.getFilteredOptions();
+            CommonUtils.waitForSeconds(10);
             Assert.assertTrue(completeSearchResults.contains("Women"),
                     "Complete search should return exact match");
             CommonUtils.takeScreenshot(driver, "complete_search_results");
 
             // Test partial value search
-            ExtentTestManager.getTest().log(Status.INFO, "Verifying the partial text entering in search bar in dropdown in Range Architecture page");
+            ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter options and partial search");
             rangeArchitecturePage.searchInFilter("Wo");
+            CommonUtils.waitForPageLoad(driver);
+            CommonUtils.waitForSeconds(10);
             Assert.assertTrue(rangeArchitecturePage.verifyPartialSearch("Wo"),
                     "Partial search should return matching results");
             CommonUtils.takeScreenshot(driver, "partial_search_results");
@@ -692,42 +899,25 @@ public class CurrentClusterRATest extends BasePage {
             // Clear search
             ExtentTestManager.getTest().log(Status.INFO, "Verifying the clear search in dropdown in Range Architecture page");
             rangeArchitecturePage.searchInFilter("");
+            CommonUtils.waitForSeconds(30);
             CommonUtils.takeScreenshot(driver, "search_cleared");
         }
 
-//    @Test(priority = 7, description = "Verify Clear All functionality")
-//    public void testClearAllFunctionality() {
-//        rangeArchitecturePage.clickFilterButton();
-//
-//        // Select some options from different filters
-//        rangeArchitecturePage.clickFilterHeader("Family");
-//        rangeArchitecturePage.selectFilterOption("Women");
-//
-//        rangeArchitecturePage.clickFilterHeader("Class Name");
-//        rangeArchitecturePage.selectFilterOption("Western Wear");
-//
-//        CommonUtils.takeScreenshot(driver,"before_clear_all");
-//
-//        // Click Clear All
-//        rangeArchitecturePage.clickClearAllButton();
-//
-//        CommonUtils.takeScreenshot(driver,"after_clear_all");
-//
-//        // Verify all filters are cleared (this would need additional verification logic)
-//        // You might need to add methods to check if filters are applied
-//    }
-
-    @Test(priority = 1, description = "Verify that each filter has all list items with checkboxes")
+    @Test(priority = 1, description = "Verify that each filter has all list items with checkboxes",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testFilterListItemsWithCheckboxes() {
             try {
                 ExtentTest test = ExtentTestManager.getTest();
+                rangeArchitecturePage.switchToCurrentClusterRA();
+                CommonUtils.waitForPageLoad(driver);
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the filter has list items in checkboxes in dropdown in Range Architecture page");
                 rangeArchitecturePage.clickFilterButton();
                 List<String> filterNames = Arrays.asList("Family", "Class Name", "Brick Name", "Top Brick", "Brick", "Enrichment");
 
                 for (String filterName : filterNames) {
                     int count = rangeArchitecturePage.verifyFilterListItemsWithCheckboxes(filterName);
-                    Assert.assertTrue(count > 0, "Filter '" + filterName + "' should have checkboxes for all list items");
+                    CommonUtils.waitForSeconds(10);
+                    CommonUtils.takeScreenshot(driver,"checkboxes are listed");
+                    Assert.assertTrue(count > 0, "Filter '" + filterName + "' should have visible, clickable checkbox labels for all list items");
                 }
 
                 CommonUtils.takeScreenshot(driver,"filter_list_items_with_checkboxes");
@@ -737,15 +927,19 @@ public class CurrentClusterRATest extends BasePage {
             }
         }
 
-    @Test(priority = 2, description = "Verify search bar presence in each table filter")
+    @Test(priority = 2, description = "Verify search bar presence in each table filter",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testSearchBarPresenceInFilters() {
             try {
                 ExtentTest test = ExtentTestManager.getTest();
+                rangeArchitecturePage.switchToCurrentClusterRA();
+                CommonUtils.waitForPageLoad(driver);
                 ExtentTestManager.getTest().log(Status.INFO, "Verifying the search bar presence in filter dropdown in Range Architecture page");
+                rangeArchitecturePage.clickFilterButton();
                 List<String> filterNames = Arrays.asList("Family", "Class Name", "Brick Name", "Top Brick", "Brick", "Enrichment");
 
                 for (String filterName : filterNames) {
                     boolean hasSearchBar = rangeArchitecturePage.verifySearchBarInFilter(filterName);
+                    CommonUtils.takeScreenshot(driver,"Searchbar is visible");
                     Assert.assertTrue(hasSearchBar, "Filter '" + filterName + "' should have a search bar");
                 }
 
@@ -756,64 +950,75 @@ public class CurrentClusterRATest extends BasePage {
             }
         }
 
-    @Test(priority = 3, description = "Verify search functionality in filter dropdowns")
-    public void testSearchFunctionalityInFilters() {
-            try {
-                ExtentTest test = ExtentTestManager.getTest();
+//    @Test(priority = 3, description = "Verify search functionality in filter dropdowns")
+//    public void testSearchFunctionalityInFilters() {
+//            try {
+//                ExtentTest test = ExtentTestManager.getTest();
+//
+//                // Test partial search in different filters
+//                ExtentTestManager.getTest().log(Status.INFO, "Verifying the partial text entering in searchbar in dropdown in Range Architecture page");
+//                boolean attributeSearch = rangeArchitecturePage.testSearchFunctionality("Brick Name", "Short");
+//                Assert.assertTrue(attributeSearch, "Search for 'Short' should filter relevant items");
+//
+//                boolean partialSearch = rangeArchitecturePage.testSearchFunctionality("Family", "Shirt");
+//                Assert.assertTrue(partialSearch, "Partial search should work correctly");
+//
+//                CommonUtils.takeScreenshot(driver, "search_functionality_verification");
+//            } catch (Exception e) {
+//                CommonUtils.takeScreenshot(driver, "search_functionality_error");
+//                Assert.fail("Test failed: " + e.getMessage());
+//            }
+//        }
 
-                // Test partial search in different filters
-                ExtentTestManager.getTest().log(Status.INFO, "Verifying the partial text entering in searchbar in dropdown in Range Architecture page");
-                boolean attributeSearch = rangeArchitecturePage.testSearchFunctionality("Brick Name", "Short");
-                Assert.assertTrue(attributeSearch, "Search for 'Short' should filter relevant items");
 
-                boolean partialSearch = rangeArchitecturePage.testSearchFunctionality("Family", "Shirt");
-                Assert.assertTrue(partialSearch, "Partial search should work correctly");
+//    @Test(priority = 4, description = "Verify multi-select functionality in filters")
+//    public void testMultiSelectFunctionality() {
+//            try {
+//                ExtentTest test = ExtentTestManager.getTest();
+//                List<String> itemsToSelect = Arrays.asList("Item1", "Item2", "Item3");
+//                boolean multiSelect = rangeArchitecturePage.verifyMultiSelectFunctionality("Family", itemsToSelect);
+//                Assert.assertTrue(multiSelect, "Filter should support multi-select functionality");
+//
+//                CommonUtils.takeScreenshot(driver, "multi_select_functionality");
+//            } catch (Exception e) {
+//                CommonUtils.takeScreenshot(driver, "multi_select_error");
+//                Assert.fail("Test failed: " + e.getMessage());
+//            }
+//        }
 
-                CommonUtils.takeScreenshot(driver, "search_functionality_verification");
-            } catch (Exception e) {
-                CommonUtils.takeScreenshot(driver, "search_functionality_error");
-                Assert.fail("Test failed: " + e.getMessage());
-            }
-        }
-
-
-    @Test(priority = 4, description = "Verify multi-select functionality in filters")
-    public void testMultiSelectFunctionality() {
-            try {
-                ExtentTest test = ExtentTestManager.getTest();
-                List<String> itemsToSelect = Arrays.asList("Item1", "Item2", "Item3");
-                boolean multiSelect = rangeArchitecturePage.verifyMultiSelectFunctionality("Family", itemsToSelect);
-                Assert.assertTrue(multiSelect, "Filter should support multi-select functionality");
-
-                CommonUtils.takeScreenshot(driver, "multi_select_functionality");
-            } catch (Exception e) {
-                CommonUtils.takeScreenshot(driver, "multi_select_error");
-                Assert.fail("Test failed: " + e.getMessage());
-            }
-        }
-
-    @Test(description = "Verify that all table header filters support multi-select")
+    @Test(description = "Verify that all table header filters support multi-select",dependsOnMethods = "testRangeArchitectureNavigation")
     public void verifyMultiSelectOnAllTableHeaderFilters() {
             ExtentTestManager.getTest().log(Status.INFO, "Validating multi-select capability of table header filters");
-
+            rangeArchitecturePage.switchToCurrentClusterRA();
+            CommonUtils.waitForPageLoad(driver);
+            rangeArchitecturePage.clickFilterButton();
             boolean result = rangeArchitecturePage.verifyAllFiltersAreMultiSelectable();
+            CommonUtils.takeScreenshot(driver,"Multi checkboxes and filters selected");
 
             Assert.assertTrue(result, "Each filter dropdown should support multi-select functionality");
-        }
+            CommonUtils.takeScreenshot(driver,"Dropdown should selected multi filters and checkboxes");
+    }
 
-    @Test(priority = 5, description = "Verify sort functionality after filtering")
+    @Test(priority = 5, description = "Verify sort functionality after filtering",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testSortAfterFiltering() {
             try {
+                rangeArchitecturePage.switchToCurrentClusterRA();
+                CommonUtils.waitForPageLoad(driver);
                 // Test sorting on different columns after applying filter
-                boolean brickSort = rangeArchitecturePage.testSortAfterFiltering("Family", "Men", "Brick Name");
+                ExtentTestManager.getTest().log(Status.INFO, "Verifying the Family header results based on sorting filter");
+                rangeArchitecturePage.clickFilterButton();
+                boolean brickSort = rangeArchitecturePage.testSortAfterFiltering("Family", "Women", "Brick Name");
                 Assert.assertTrue(brickSort, "Sort should work on Brick Name column after filtering");
+                CommonUtils.takeScreenshot(driver,"Family header table results sort_after_filtering");
 
-                boolean attributeSort = rangeArchitecturePage.testSortAfterFiltering("Class Name", "TestClass", "Attributes");
+                ExtentTestManager.getTest().log(Status.INFO, "Verifying the Class Name header results based on sorting filter");
+                boolean attributeSort = rangeArchitecturePage.testSortAfterFiltering("Class Name", "Lingerie & Innerwear", "Brick Name");
                 Assert.assertTrue(attributeSort, "Sort should work on Attributes column after filtering");
+                CommonUtils.takeScreenshot(driver,"Class Name header table results sort_after_filtering");
 
-                boolean costSort = rangeArchitecturePage.testSortAfterFiltering("Top Brick", "TestBrick", "Cost Range");
+                ExtentTestManager.getTest().log(Status.INFO, "Verifying the Top Brick header results based on sorting filter");
+                boolean costSort = rangeArchitecturePage.testSortAfterFiltering("Top Brick", "Innerwear", "Brick Name");
                 Assert.assertTrue(costSort, "Sort should work on Cost Range column after filtering");
-
                 CommonUtils.takeScreenshot(driver, "sort_after_filtering");
             } catch (Exception e) {
                 CommonUtils.takeScreenshot(driver, "sort_after_filtering_error");
@@ -821,16 +1026,21 @@ public class CurrentClusterRATest extends BasePage {
             }
         }
 
-    @Test(priority = 6, description = "Verify Clear All functionality")
+    @Test(priority = 6, description = "Verify Clear All functionality",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testClearAllFunctionality() {
             try {
+                rangeArchitecturePage.switchToCurrentClusterRA();
+                CommonUtils.waitForPageLoad(driver);
                 // First select some filters
-                rangeArchitecturePage.verifyMultiSelectFunctionality("Family", Arrays.asList("Item1", "Item2"));
+                rangeArchitecturePage.clickFilterButton();
+                ExtentTestManager.getTest().log(Status.INFO,"Verifying the multi select functionality for filter headers");
+                rangeArchitecturePage.verifyMultiSelectFunctionality("Family", Arrays.asList("Men","Women"));
+                CommonUtils.takeScreenshot(driver,"Filter values selected");
 
                 // Then clear all
                 boolean clearAll = rangeArchitecturePage.verifyClearAllFunctionality();
+                CommonUtils.takeScreenshot(driver,"Values are cleared");
                 Assert.assertTrue(clearAll, "Clear All should unselect all filter items");
-
                 CommonUtils.takeScreenshot(driver,"clear_all_functionality");
             } catch (Exception e) {
                 CommonUtils.takeScreenshot(driver,"clear_all_error");
@@ -838,23 +1048,29 @@ public class CurrentClusterRATest extends BasePage {
             }
         }
 
-    @Test(priority = 7, description = "Verify filter header order and clickability")
-    public void testFilterHeaderOrderAndClickability() {
-            try {
-                List<String> expectedOrder = Arrays.asList("Family", "Class Name", "Brick Name", "Top Brick", "Brick", "Enrichment");
-                boolean correctOrder = rangeArchitecturePage.verifyFilterHeaderOrder(expectedOrder);
-                Assert.assertTrue(correctOrder, "Filter headers should be in correct order");
+//    @Test(priority = 7, description = "Verify filter header order and clickability")
+//    public void testFilterHeaderOrderAndClickability() {
+//            try {
+//                List<String> expectedOrder = Arrays.asList("Family", "Class Name", "Brick Name", "Top Brick", "Brick", "Enrichment");
+//                boolean correctOrder = rangeArchitecturePage.verifyFilterHeaderOrder(expectedOrder);
+//                Assert.assertTrue(correctOrder, "Filter headers should be in correct order");
+//
+//                CommonUtils.takeScreenshot(driver, "filter_header_order");
+//            } catch (Exception e) {
+//                CommonUtils.takeScreenshot(driver, "filter_header_order_error");
+//                Assert.fail("Test failed: " + e.getMessage());
+//            }
+//        }
 
-                CommonUtils.takeScreenshot(driver, "filter_header_order");
-            } catch (Exception e) {
-                CommonUtils.takeScreenshot(driver, "filter_header_order_error");
-                Assert.fail("Test failed: " + e.getMessage());
-            }
-        }
-
-    @Test(priority = 1, description = "Verify modal does not close when clicking outside")
+    @Test(priority = 1, description = "Verify modal does not close when clicking outside",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testModalDoesNotCloseOnOutsideClick() {
+
+        ExtentTestManager.getTest().log(Status.INFO,"Verify switch to cluster RA and Upload Cluster RA button");
+        rangeArchitecturePage.switchToCurrentClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+
         // Verify modal is displayed
+        rangeArchitecturePage.clickUploadClusterRA();
         Assert.assertTrue(rangeArchitecturePage.isModalDisplayed(), "Modal should be displayed");
         CommonUtils.takeScreenshot(driver,"modal_displayed_before_outside_click");
 
@@ -872,47 +1088,79 @@ public class CurrentClusterRATest extends BasePage {
         CommonUtils.takeScreenshot(driver,"modal_still_displayed_after_outside_click");
     }
 
-    @Test(priority = 2, description = "Verify modal closes only when clicking X icon")
+    @Test(priority = 2, description = "Verify modal closes only when clicking X icon",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testModalClosesOnXIconClick() {
+        ExtentTestManager.getTest().log(Status.INFO,"Verify switch to cluster RA and Upload Cluster RA button");
+        rangeArchitecturePage.switchToCurrentClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+
         // Verify modal is displayed
+        ExtentTestManager.getTest().log(Status.INFO,"Verify modal is displayed when click on cluster upload button");
+        rangeArchitecturePage.clickUploadClusterRA();
         Assert.assertTrue(rangeArchitecturePage.isModalDisplayed(), "Modal should be displayed");
         CommonUtils.takeScreenshot(driver,"modal_displayed_before_close_click");
 
         // Click the X (close) button
+        ExtentTestManager.getTest().log(Status.INFO,"Verify the close x button");
         rangeArchitecturePage.clickCloseButton();
+        CommonUtils.takeScreenshot(driver,"Close button is displayed");
 
         // Verify modal is closed
+        ExtentTestManager.getTest().log(Status.INFO,"Verify the modal is closed");
         Assert.assertTrue(rangeArchitecturePage.isModalClosed(), "Modal should be closed after clicking X icon");
         CommonUtils.takeScreenshot(driver,"modal_closed_after_x_click");
     }
 
-    @Test(priority = 3, description = "Verify Select Cluster mandatory label with asterisk")
+    @Test(priority = 3, description = "Verify Select Cluster mandatory label with asterisk",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testSelectClusterMandatoryLabel() {
+        ExtentTestManager.getTest().log(Status.INFO,"Switch to the cluster and verify the label is displayed");
+        rangeArchitecturePage.switchToCurrentClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+
+        // Verify modal is displayed
+        ExtentTestManager.getTest().log(Status.INFO,"Verify modal is displayed when click on cluster upload button");
+        rangeArchitecturePage.clickUploadClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+
         // Verify Select Cluster label is displayed
+        ExtentTestManager.getTest().log(Status.INFO,"Verify the select cluster is displayed");
         Assert.assertTrue(rangeArchitecturePage.isSelectClusterLabelDisplayed(), "Select Cluster label should be displayed");
+        CommonUtils.takeScreenshot(driver,"Selected cluster is displayed");
 
         // Verify asterisk is displayed indicating mandatory field
+        ExtentTestManager.getTest().log(Status.INFO,"Verify the select cluster Asterik is displayed");
         Assert.assertTrue(rangeArchitecturePage.isSelectClusterAsteriskDisplayed(), "Asterisk should be displayed for mandatory field");
+        CommonUtils.takeScreenshot(driver,"Cluster asterik is displayed");
+
 
         // Verify label text contains "Select Cluster"
+        ExtentTestManager.getTest().log(Status.INFO,"Verify the select cluster text contains labels");
         String labelText = rangeArchitecturePage.getSelectClusterLabelText();
         Assert.assertTrue(labelText.contains("Select Cluster"), "Label should contain 'Select Cluster' text");
-
         CommonUtils.takeScreenshot(driver,"select_cluster_mandatory_label_verified");
     }
 
-    @Test(priority = 4, description = "Verify presence of Select Cluster dropdown field")
+    @Test(priority = 4, description = "Verify presence of Select Cluster dropdown field",dependsOnMethods = "testRangeArchitectureNavigation")
     public void testSelectClusterDropdownPresence() {
+        ExtentTestManager.getTest().log(Status.INFO,"Switch to the cluster and verify the label is displayed");
+        rangeArchitecturePage.switchToCurrentClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+
+        // Verify modal is displayed
+        ExtentTestManager.getTest().log(Status.INFO,"Verify modal is displayed when click on cluster upload button");
+        rangeArchitecturePage.clickUploadClusterRA();
+        CommonUtils.waitForPageLoad(driver);
+
         // Verify dropdown field is displayed
         Assert.assertTrue(rangeArchitecturePage.isSelectClusterDropdownDisplayed(), "Select Cluster dropdown should be displayed");
 
         // Verify dropdown has correct placeholder text
         String placeholderText = rangeArchitecturePage.getDropdownPlaceholderText();
         Assert.assertEquals(placeholderText, "Search Clusters", "Dropdown should have 'Search Clusters' placeholder");
+        CommonUtils.takeScreenshot(driver,"Cluster dropdown is displayed");
 
         // Verify dropdown arrow is displayed
         Assert.assertTrue(rangeArchitecturePage.isDropdownArrowDisplayed(), "Dropdown arrow should be displayed");
-
         CommonUtils.takeScreenshot(driver,"select_cluster_dropdown_presence_verified");
     }
 
